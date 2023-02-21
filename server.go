@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"strings"
 	//"strings"
 )
 
 var allNicknames []string 
+var channel = make(chan string)
 
 func server(){
 	socket := &net.TCPAddr{
@@ -92,17 +94,27 @@ func connectionHandler(connection net.Conn){
 				message = fmt.Sprintf("\n%s\n %s", list(allNicknames), prompt)
 				connection.Write([]byte(message))
 				buffer = make([]byte, 1024)
-			}else if(text_in_buffer == "call"){
-				message = fmt.Sprintf("calling...\n%s", prompt)
-				connection.Write([]byte(message))
-				buffer = make([]byte, 1024)
+			}else if(strings.Index(text_in_buffer, "call") != -1 ){
+				text_in_buffer_splited := strings.Split(text_in_buffer, " ")
+				nickname_toCall := text_in_buffer_splited[1]
+				if(!checkNickname(nickname_toCall, allNicknames)){
+					if(nickname_toCall == nickname){
+						message = fmt.Sprintf("[!] No te puedes llamar a ti mismo\n%s", prompt)
+						connection.Write([]byte(message))
+					}
+					call(nickname_toCall, connection)
+					buffer = make([]byte, 1024)
+				}else{
+					message = fmt.Sprintf("\n[!] The nickname: %s, is not connected\n\n%s", nickname_toCall, prompt)
+					connection.Write([]byte(message))
+					buffer = make([]byte, 1024)
+				}
 			}else{
 				message = fmt.Sprintf("\n[!] Not a command\n\n%s", prompt)
 				connection.Write([]byte(message))
 				buffer = make([]byte, 1024)
 			}
-			
-		}	
+		}
 	}
 }
 
@@ -122,6 +134,28 @@ func list(allNicknames []string) string {
 	}
 	return list
 }
+
+func ReadChannel(nickname string, connection net.Conn){
+	var message string
+	select{
+	case dataIn_Channel := <-channel:
+		dataSplited := strings.Split(dataIn_Channel, " ")
+		SendedBy := dataSplited[3]
+		SendedTo := dataSplited[1]
+		Action := dataSplited[0]
+		switch Action{
+		case "CALL":
+			if(SendedTo == nickname){
+				message = fmt.Sprintf("%s quiere iniciar una conversación, ¿La aceptas? [Si, No] : ", SendedBy)
+				connection.Write()
+			}
+		}
+	}
+}
+
+func call(nickname_toCall string, connection net.Conn){
+	
+} 
 
 func main(){
 	server()
