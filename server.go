@@ -400,7 +400,6 @@ func ReadChannel(nickname string, connection net.Conn){
 	}		
 }	
 
-
 func main(){
 	server()
 }
