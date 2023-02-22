@@ -17,6 +17,7 @@ type nicknames_data struct{
 	calling_to string
 	called_by string
 	incall_with string
+	changingTo_PreviousStep bool
 }
 
 var nicknames = make(map[string]nicknames_data)
@@ -65,6 +66,7 @@ func connectionHandler(connection net.Conn){
 				called_by: "",
 				calling_to: "",
 				incall_with: "",
+				changingTo_PreviousStep: false,
 			}
 			
 			var new_allNicknames []string
@@ -75,6 +77,14 @@ func connectionHandler(connection net.Conn){
 			}
 			allNicknames = new_allNicknames
 			return
+		}
+
+		if(nicknames[nickname].changingTo_PreviousStep == true){
+			step = step - 1
+			prompt = fmt.Sprintf("[ %s ]=> ", nickname)
+			nicknames[nickname] = nicknames_data{
+				changingTo_PreviousStep: false,
+			}
 		}
 
 		buffer = bytes.Trim(buffer, "\x00")
@@ -133,15 +143,17 @@ func connectionHandler(connection net.Conn){
 					buffer = make([]byte, 1024)
 					continue
 				}
+				
 				text_in_buffer_splited := strings.Split(text_in_buffer, " ")
-				
-				
 				nickname_toCall := text_in_buffer_splited[1]
 
 				nicknames[nickname] = nicknames_data {
 					calling_to: nickname_toCall,
 				}
 
+				message = fmt.Sprintf("[?] Escribe bye para terminar llamada\n( Esperando.... )=[ %s ]=> ",nickname)
+				connection.Write([]byte(message))
+				buffer = make([]byte, 1024)
 				step = 4
 				
 				if(!checkNickname(nickname_toCall, allNicknames)){
@@ -186,6 +198,7 @@ func connectionHandler(connection net.Conn){
 				
 				prompt = fmt.Sprintf("( %s <==> %s ) => ", nicknames[nickname].incall_with, nickname)
 				connection.Write([]byte(prompt))
+				buffer = make([]byte, 1024)
 
 			}else if(Action == "decline" && len(strings.Split(text_in_buffer, " ")) == 2){
 				dataSplited := strings.Split(text_in_buffer, " ")
@@ -198,17 +211,60 @@ func connectionHandler(connection net.Conn){
 				}
 
 				channel <- message
+				buffer = make([]byte, 1024)
+				connection.Write([]byte(prompt))
+
 			}else{
 				message = fmt.Sprintf("\n[!] Not a command\n\n%s", prompt)
 				connection.Write([]byte(message))
 				buffer = make([]byte, 1024)
 			}
+
+			if(Action == "Bye" || Action == "bye"){
+				connection.Write([]byte("[!] No estas llamando o en conversación"))
+			}
+
 		case 4:
+			Action := strings.Split(text_in_buffer, " ")[0]
+			if(nicknames[nickname].incall_with == "" && nicknames[nickname].calling_to == ""){
+				step = 3
+
+				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
+				continue
+			}
+
+			if(Action == "Bye" || Action == "bye"){
+				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
+				message = fmt.Sprintf("END %s By %s", nicknames[nickname].incall_with, nickname)
+
+				if(nicknames[nickname].calling_to != ""){
+					message = fmt.Sprintf("END %s By %s", nicknames[nickname].calling_to, nickname)
+					nicknames[nickname] = nicknames_data{
+						calling_to: "",
+					}
+				}
+				
+				channel <- message
+				step = 3
+
+				nicknames[nickname] = nicknames_data{
+					has_call: false,
+					called_by: "",
+					calling_to: "",
+					incall_with: "",
+				}
+				
+				connection.Write([]byte(prompt))
+				buffer = make([]byte, 1024)
+				continue
+			}
+
 			message = fmt.Sprintf("SEND %s By %s %s", nicknames[nickname].incall_with, nickname, text_in_buffer)
 			prompt = fmt.Sprintf("( %s <==> %s ) => ", nicknames[nickname].incall_with, nickname)
 			channel<-message
 			buffer = make([]byte, 1024)
 			connection.Write([]byte(prompt))
+
 		}
 	}
 }
@@ -249,6 +305,7 @@ func ReadChannel(nickname string, connection net.Conn){
 		}
 		select {
 		case dataIn_Channel := <-channel:
+			fmt.Println(dataIn_Channel)
 			
 			//READING THE CHANNEL
 			dataSplited := strings.Split(dataIn_Channel, " ")
@@ -266,13 +323,12 @@ func ReadChannel(nickname string, connection net.Conn){
 						message = fmt.Sprintf("DECLINE %s By %s", SendedBy, SendedTo)
 						channel<-message
 					}
-					//called_by = SendedBy *TODO
+
 					nicknames[nickname] = nicknames_data{
 						has_call: true, 
 						called_by: SendedBy,
 					}
 			
-					
 					message = fmt.Sprintf("%s quiere iniciar una conversación, ¿La aceptas? \n[ %s ]=> ", SendedBy, SendedTo)
 					connection.Write([]byte(message))
 				}else{
@@ -306,10 +362,34 @@ func ReadChannel(nickname string, connection net.Conn){
 				}
 			case "SEND":
 				if(SendedTo == nickname){
+					tag := fmt.Sprintf(" <=[ %s ]", SendedBy)
+					dataSplited = append(dataSplited, tag)
 					new_slice := dataSplited[4:]
 					message = fmt.Sprintf("%s \n( %s <==> %s ) => ",strings.Join(new_slice, " "),nicknames[nickname].incall_with ,nickname)
 
 					connection.Write([]byte(message))
+				}else{
+					channel<-dataIn_Channel
+				}
+			case "END":
+				if(SendedTo == nickname){
+					if(nicknames[nickname].incall_with == SendedBy){
+						connection.Write([]byte(fmt.Sprintf("\n[!] Conversasión Terminada por %s\n[ %s ]=> ", nicknames[nickname].incall_with, nickname)))
+						nicknames[nickname] = nicknames_data{
+							has_call: false,
+							called_by: "",
+							calling_to: "",
+							incall_with: "",
+							changingTo_PreviousStep: true,
+						}
+					}else if(nicknames[nickname].called_by == SendedBy){
+						nicknames[nickname] = nicknames_data{
+							has_call: false,
+							called_by: "",
+						}
+						message = fmt.Sprintf("[!] %s ha finalizado la llamada\n[ %s ]=> ",SendedTo, SendedBy)
+						connection.Write([]byte(message))
+					}
 				}else{
 					channel<-dataIn_Channel
 				}
