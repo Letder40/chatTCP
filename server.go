@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
-	//"math/rand"
 	"net"
-	//"strconv"
 	"strings"
 	"time"
 )
@@ -253,7 +251,6 @@ func ReadChannel(nickname string, connection net.Conn){
 		case dataIn_Channel := <-channel:
 			
 			//READING THE CHANNEL
-			fmt.Printf("%s -> %s\n", nickname, dataIn_Channel)
 			dataSplited := strings.Split(dataIn_Channel, " ")
 			SendedBy := dataSplited[3]
 			SendedTo := dataSplited[1]
