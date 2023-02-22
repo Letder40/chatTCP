@@ -274,7 +274,6 @@ func ReadChannel(nickname string, connection net.Conn){
 			
 					
 					message = fmt.Sprintf("%s quiere iniciar una conversación, ¿La aceptas? \n[ %s ]=> ", SendedBy, SendedTo)
-					fmt.Printf("%+v\n", nicknames[nickname])
 					connection.Write([]byte(message))
 				}else{
 					channel<-dataIn_Channel
@@ -306,7 +305,6 @@ func ReadChannel(nickname string, connection net.Conn){
 					channel<-dataIn_Channel
 				}
 			case "SEND":
-				fmt.Printf("%s is in call with %s\n", nickname, nicknames[nickname].incall_with)
 				if(SendedTo == nickname){
 					new_slice := dataSplited[4:]
 					message = fmt.Sprintf("%s \n( %s <==> %s ) => ",strings.Join(new_slice, " "),nicknames[nickname].incall_with ,nickname)
