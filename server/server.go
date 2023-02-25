@@ -1,9 +1,7 @@
 package main
 
 //ChatTCP is a service of chat over TCP based on a custom protocol
-//
 
-//Local modules
 import (
 	//Local
 	"github.com/Letder40/ChatTCP/v1/handler"
@@ -13,6 +11,13 @@ import (
 	"fmt"
 	"net"
 )
+
+//Change this to listen in other ip.addr
+
+var lisenning_On = "0.0.0.0"
+
+// -------------------------------------
+
 
 func main(){
 	go writers.CallChannelWriter()
@@ -24,7 +29,7 @@ func main(){
 
 func server(){
 	socket := &net.TCPAddr{
-		IP: net.ParseIP("0.0.0.0"),
+		IP: net.ParseIP(lisenning_On),
 		Port: 9701,
 	}
 	listener, err := net.ListenTCP("tcp", socket)

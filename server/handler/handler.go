@@ -77,8 +77,6 @@ func ConnectionHandler(connection net.Conn){
 			global.Nicknames[nickname] = global.Nicknames_data{
 				ChangingToPreviousStep: false,
 			}
-			print("REACH")
-
 		}
 		
 		switch step{
@@ -317,7 +315,6 @@ func ConnectionHandler(connection net.Conn){
 			if(incallWith == "" && callingTo == ""){
 				step = 3
 				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
-				print("REACH 2")
 				continue
 			}
 
