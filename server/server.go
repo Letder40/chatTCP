@@ -24,7 +24,7 @@ func main(){
 
 func server(){
 	socket := &net.TCPAddr{
-		IP: net.ParseIP("192.168.1.12"),
+		IP: net.ParseIP("0.0.0.0"),
 		Port: 9701,
 	}
 	listener, err := net.ListenTCP("tcp", socket)
