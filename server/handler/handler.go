@@ -114,7 +114,7 @@ func ConnectionHandler(connection net.Conn) {
 				}
 
 				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
-				if global.Translation_functionality {
+				if global.Translation_service.Enable {
 					message = fmt.Sprintf("Welcome %s \n\n[?] help for ChatTCP:\nlist -> Show the nicknames of all connected users\ncall nickname -> call someone by the user nickname\naccept [nickanme of the other user]-> Accept a call\ndecline [nickanme of the other user] -> decline a call\n\n[ Feature: Auto Translation enabled ] \nlanguage [ two first letters of your language ] -> set a language to automatically translate all received messages into it\nExample:\nlanguage en \n\n%s", nickname, prompt)
 				} else {
 					message = fmt.Sprintf("Welcome %s \n\n[?] help for ChatTCP:\nlist -> Show the nicknames of all connected users\ncall nickname -> call someone by the user nickname\naccept [nickanme of the other user]-> Accept a call\ndecline [nickanme of the other user] -> decline a call\n%s", nickname, prompt)
@@ -128,20 +128,38 @@ func ConnectionHandler(connection net.Conn) {
 
 		case 3:
 			//Translation_functionality
-			if Action == "language" && bufferLen == 2 && global.Translation_functionality {
+			if Action == "language" && bufferLen == 2 && global.Translation_service.Enable {
 				language := textInBufferSplited[1]
-				exists := autolanguage.Check_language(language)
+				
+				if global.Translation_service.LTranslate {
+					language = strings.ToLower(language)
+					exists := autolanguage.LTCheck_language(language)
 
-				if exists {
-					global.Nicknames[nickname] = global.Nicknames_data{
-						Language: language,
+					if exists {
+						global.Nicknames[nickname] = global.Nicknames_data{
+							Language: language,
+						}
+						connection.Write([]byte(prompt))
+						continue
+					} else {
+						message = fmt.Sprintf("[!] Invalid language code\n%s", prompt)
+						connection.Write([]byte(message))
+						continue
 					}
-					connection.Write([]byte(prompt))
-					continue
-				} else {
-					message = fmt.Sprintf("[!] Invalid language code\n%s", prompt)
-					connection.Write([]byte(message))
-					continue
+				
+				}else if global.Translation_service.Deepl{
+					language = strings.ToUpper(language)
+					if autolanguage.DLCheck_language(language) {
+						global.Nicknames[nickname] = global.Nicknames_data{
+							Language: language,
+						}
+						connection.Write([]byte(prompt))
+						continue
+					} else {
+						message = fmt.Sprintf("[!] Invalid language code\n%s", prompt)
+						connection.Write([]byte(message))
+						continue
+					}
 				}
 
 				//LIST

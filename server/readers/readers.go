@@ -184,10 +184,15 @@ func ReadPrivateChannel(nickname string, connection net.Conn, channelId int) {
 
 			if sendedTo == nickname {
 				tag := fmt.Sprintf(" <=[ %s ]", sendedBy)
-				language := global.Nicknames[nickname].Language
-				println(language)
-				if language != "" {
-					message = autolanguage.Get_translation(language, dataInChannel.Message)
+				dst_lang := global.Nicknames[nickname].Language
+				src_lang := global.Nicknames[sendedBy].Language
+				// Translation
+				if dst_lang != "" && global.Translation_service.Enable {
+					if global.Translation_service.LTranslate {
+						message = autolanguage.LTGet_translation(src_lang,  dst_lang, dataInChannel.Message)
+					}else if global.Translation_service.Deepl {
+						message = autolanguage.DLGet_translation(src_lang, dst_lang, dataInChannel.Message)
+					}
 				} else {
 					message = dataInChannel.Message
 				}

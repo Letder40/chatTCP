@@ -23,10 +23,15 @@ var(
 	ChannelId = 0
 	FrameId = 0
 
-  //Translation functionality
-  Translation_functionality = false
+  	//Translation functionality
+	Translation_service = Translation {}
 )
-
+type Translation struct {
+	Enable bool
+	Deepl bool
+	Deepl_api_key string
+	LTranslate bool
+}
 
 type Nicknames_data struct{
 	HasCall bool

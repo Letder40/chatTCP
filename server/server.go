@@ -4,14 +4,11 @@ package main
 
 import (
 	//local
-	"strings"
-
 	"github.com/Letder40/ChatTCP/v1/global"
 	"github.com/Letder40/ChatTCP/v1/handler"
 	"github.com/Letder40/ChatTCP/v1/writers"
 
 	//Remote packages
-	"bufio"
 	"fmt"
 	"net"
 	"os"
@@ -33,12 +30,22 @@ func main(){
 }
 
 func server(){
-  fmt.Print("Do you want to enable Translation functionality?? [!] It requires to install https://github.com/LibreTranslate/LibreTranslate, and be running on 5000 port [Y/n] ")
-  reader := bufio.NewReader(os.Stdin) 
-  input, _ := reader.ReadString('\n')
-  input = strings.Trim(input, "\n")
-  if input == "" || strings.ToLower(input) == "y" {
-    global.Translation_functionality = true
+  if len(os.Args) == 3 || len(os.Args) == 2{
+	option := os.Args[1]
+	switch option {
+	case "--libre-translate", "-lt":
+		global.Translation_service.Enable = true
+		global.Translation_service.LTranslate = true
+	
+	case "--deepl", "-dl":
+		global.Translation_service.Enable = true
+		global.Translation_service.Deepl = true
+		global.Translation_service.Deepl_api_key = os.Args[2]
+	
+	default :
+		fmt.Println("incorrect option, valid arguments --libre-translate or --depl [api-key]")
+		os.Exit(1)
+	}
   }
 
   socket := &net.TCPAddr{
