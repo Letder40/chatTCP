@@ -12,4 +12,4 @@ A chat server / client based on a custom text type protocol over tcp
 
 ## Server Preview
 
-![Client](media/client.png)
+![Client](media/server.png)
