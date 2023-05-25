@@ -23,11 +23,14 @@ var(
 	ChannelId = 0
 	FrameId = 0
 
+  //Translation functionality
+  Translation_functionality = false
 )
 
 
 type Nicknames_data struct{
 	HasCall bool
+  	Language string
 	CallingTo string
 	CalledBy string
 	IncallWith string

@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"net"
 	"os"
+
 )
 
 func main() {
     // Dirección IP y puerto del servidor
-    serverAddr := "192.168.1.12:9701"
+    if len(os.Args) != 2{
+      fmt.Println("usage: ./client ip-addr")
+      os.Exit(1)
+    } 
+    serverAddr := os.Args[1] + ":9701"
 
     // Conectar al servidor
     conn, err := net.Dial("tcp", serverAddr)

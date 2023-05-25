@@ -3,13 +3,18 @@ package main
 //ChatTCP is a service of chat over TCP based on a custom protocol
 
 import (
-	//Local
+	//local
+	"strings"
+
+	"github.com/Letder40/ChatTCP/v1/global"
 	"github.com/Letder40/ChatTCP/v1/handler"
 	"github.com/Letder40/ChatTCP/v1/writers"
 
 	//Remote packages
+	"bufio"
 	"fmt"
 	"net"
+	"os"
 )
 
 //Change this to listen in other ip.addr
@@ -28,7 +33,15 @@ func main(){
 }
 
 func server(){
-	socket := &net.TCPAddr{
+  fmt.Print("Do you want to enable Translation functionality?? [!] It requires to install https://github.com/LibreTranslate/LibreTranslate, and be running on 5000 port [Y/n] ")
+  reader := bufio.NewReader(os.Stdin) 
+  input, _ := reader.ReadString('\n')
+  input = strings.Trim(input, "\n")
+  if input == "" || strings.ToLower(input) == "y" {
+    global.Translation_functionality = true
+  }
+
+  socket := &net.TCPAddr{
 		IP: net.ParseIP(lisenning_On),
 		Port: 9701,
 	}
@@ -37,14 +50,14 @@ func server(){
 		fmt.Println("Error : ", err)
 	}
 
-	fmt.Println("Escuchando conexiones entrantes a chatTCP por el puerto 9701")
+	fmt.Println("Listenning connections to chatTCP on 9701/tcp port")
 
 	defer listener.Close()
 
 	for {
 		connection, err := listener.Accept()
 		if err != nil{
-			fmt.Println("Error en la conexión con el cliente : ", err)
+      fmt.Println("Error in the client-server connection : ", err)
 		}
 
 		go handler.ConnectionHandler(connection)
