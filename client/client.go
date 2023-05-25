@@ -26,9 +26,9 @@ func main() {
 
     // Leer datos del servidor y mostrarlos en pantalla
     go func() {
-        serverBuffer := make([]byte, 1024)
         conn.Write([]byte("Go Connect"))
         for {
+            serverBuffer := make([]byte, 1024)
             _,err = conn.Read(serverBuffer)
             
             if err != nil {

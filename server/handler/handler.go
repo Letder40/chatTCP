@@ -23,7 +23,7 @@ func ConnectionHandler(connection net.Conn) {
 		prompt   string
 	)
 
-	connection.Write([]byte("ChatTCP V1.0\n"))
+	connection.Write([]byte("ChatTCP V1.5\n"))
 
 	for {
 
