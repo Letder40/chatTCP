@@ -24,14 +24,15 @@ var lisenning_On = "0.0.0.0"
 func main(){
 	go writers.CallChannelWriter()
 	go writers.PrivateMessageWriter()
-	go writers.PrivateResponseWriter()
 
 	server()
 }
 
 func server(){
-  if len(os.Args) == 3 || len(os.Args) == 2{
+
+  	if len(os.Args) == 3 || len(os.Args) == 2{
 	option := os.Args[1]
+
 	switch option {
 	case "--libre-translate", "-lt":
 		global.Translation_service.Enable = true
@@ -46,7 +47,8 @@ func server(){
 		fmt.Println("incorrect option, valid arguments --libre-translate or --depl [api-key]")
 		os.Exit(1)
 	}
-  }
+
+  	}
 
   socket := &net.TCPAddr{
 		IP: net.ParseIP(lisenning_On),

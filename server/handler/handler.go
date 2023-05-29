@@ -2,13 +2,14 @@ package handler
 
 import (
 	// Local modules
-	autolanguage "github.com/Letder40/ChatTCP/v1/auto-language"
+	"github.com/Letder40/ChatTCP/v1/autolanguage"
 	"github.com/Letder40/ChatTCP/v1/checkers"
 	"github.com/Letder40/ChatTCP/v1/global"
 	"github.com/Letder40/ChatTCP/v1/readers"
 
 	// Remote modules
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net"
 	"strings"
@@ -16,408 +17,397 @@ import (
 
 func ConnectionHandler(connection net.Conn) {
 
-	var (
-		step     = 1
-		message  string
-		nickname string
-		prompt   string
-	)
-
-	connection.Write([]byte("ChatTCP V1.5\n"))
+	connection.Write([]byte("ChatTCP V2.0\n"))
+	var nickname string
 
 	for {
 
-		buffer := make([]byte, 1024*5)
+		buffer := make([]byte, 256)
 		_, err := connection.Read(buffer)
+		buffer = bytes.Trim(buffer, "\x00")
+		buffer = bytes.Trim(buffer, "\n")
+		var textInBuffer = string(buffer)
+		var netError = global.NetError{}
+
+		//If user disconnects
+		if err != nil {
+			return
+		}
+
+		//nickname selection
+
+		//valid characters
+		charlist := []string{
+			"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m",
+			"n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z",
+			".", "_", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+		}
+
+		var nickanme_lower = strings.ToLower(textInBuffer)
+		var nickanme = strings.Split(nickanme_lower, "")
+		lenofNickname := len(nickanme)
+		var counter = 0
+
+		for _, char := range nickanme {
+			for _, char2compare := range charlist {
+				if char == char2compare {
+					counter += 1
+				}
+			}
+		}
+
+		if counter != lenofNickname {
+			jsonErr := netError.SetError("Banned chars")
+			connection.Write(jsonErr)
+			continue
+		}
+
+		if !checkers.CheckNickname(textInBuffer) {
+			jsonErr := netError.SetError("Nickname used")
+			connection.Write(jsonErr)
+			continue
+		}
+
+		nickname = textInBuffer
+
+		global.AllNicknames = append(global.AllNicknames, nickname)
+		callbox := make(chan global.DataForChannel)
+		global.CallChannels[nickname] = callbox
+		go readers.ReadCallChannel(nickname, connection)
+
+		global.Nicknames[nickname] = global.Nicknames_data{
+			InCall:     false,
+			CalledBy:   "",
+			CallingTo:  "",
+			IncallWith: "",
+			ChannelId:  0,
+		}
+
+		break
+	}
+
+	for {
+
+		var (
+			callingTo  = global.Nicknames[nickname].CallingTo
+			channelId  = global.Nicknames[nickname].ChannelId
+			inCall     = global.Nicknames[nickname].InCall
+			incallWith = global.Nicknames[nickname].IncallWith
+		)
+
+		//if inCall || callingTo != "" {
+		//	go readers.ReadPrivateChannel(nickname, connection)
+		//} else {
+		//	go readers.ReadCallChannel(nickname, connection)
+		//}
+
+		buffer := make([]byte, 256)
+		_, err := connection.Read(buffer)
+
+		if err != nil {
+
+			delete(global.Nicknames, nickname)
+			delete(global.CallChannels, nickname)
+
+			var newAllNicknames []string
+			for _, element := range global.AllNicknames {
+				if element != nickname {
+					newAllNicknames = append(newAllNicknames, element)
+				}
+			}
+
+			fmt.Printf("%s has disconnected\n", nickname)
+			global.AllNicknames = newAllNicknames
+			return
+		}
 
 		buffer = bytes.Trim(buffer, "\x00")
 		buffer = bytes.Trim(buffer, "\n")
-
-		var (
-			callingTo              = global.Nicknames[nickname].CallingTo
-			changingToPreviousStep = global.Nicknames[nickname].ChangingToPreviousStep
-			channelId              = global.Nicknames[nickname].ChannelId
-			hasCall                = global.Nicknames[nickname].HasCall
-			incallWith             = global.Nicknames[nickname].IncallWith
-		)
 
 		var (
 			textInBuffer        = string(buffer)
 			bufferLen           = len(strings.Split(textInBuffer, " "))
 			textInBufferSplited = strings.Split(textInBuffer, " ")
 			Action              = textInBufferSplited[0]
+			netError            = global.NetError{}
 		)
 
+		switch Action {
 
+		case "language":
 
-		//If user disconnects
-		if err != nil {
-
-			global.Nicknames[nickname] = global.Nicknames_data{}
-
-			var new_allNicknames []string
-			for _, element := range global.AllNicknames {
-				if element != nickname {
-					new_allNicknames = append(new_allNicknames, element)
-				}
-			}
-			fmt.Printf("%s has disconnected\n", nickname)
-			global.AllNicknames = new_allNicknames
-			return
-		}
-
-		if changingToPreviousStep {
-			step = 3
-			prompt = fmt.Sprintf("[ %s ]=> ", nickname)
-			global.Nicknames[nickname] = global.Nicknames_data{
-				ChangingToPreviousStep: false,
-				Language:               global.Nicknames[nickname].Language,
-			}
-		}
-
-		switch step {
-		case 1:
-
-			if textInBuffer != "Go Connect" {
-				connection.Write([]byte("Bad usage of the ChatTCP protocol\n"))
-				connection.Close()
-			}
-
-			connection.Write([]byte("Select nickname: "))
-			step += 1
-
-		case 2:
-
-			if textInBuffer != "" {
-				nickname = textInBuffer
-
-				if !checkers.CheckNickname(nickname) {
-					connection.Write([]byte("\n[!] Someone is using that nickname\n\nSelect other nickname: "))
-					continue
-				}
-
-				if bufferLen != 1 {
-					connection.Write([]byte("\n[!] The nickname cannot have whitespaces\n\nSelect other nickname: "))
-					continue
-				}
-
-				global.AllNicknames = append(global.AllNicknames, nickname)
-
-				global.Nicknames[nickname] = global.Nicknames_data{
-					HasCall:                false,
-					CalledBy:               "",
-					CallingTo:              "",
-					IncallWith:             "",
-					ChangingToPreviousStep: false,
-					ChannelId:              0,
-					Language:               global.Nicknames[nickname].Language,
-				}
-
-				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
-				if global.Translation_service.Enable {
-					message = fmt.Sprintf("Welcome %s \n\n[?] help for ChatTCP:\nlist -> Show the nicknames of all connected users\ncall nickname -> call someone by the user nickname\naccept [nickanme of the other user]-> Accept a call\ndecline [nickanme of the other user] -> decline a call\n\n[ Feature: Auto Translation enabled ] \nlanguage [ two first letters of your language ] -> set a language to automatically translate all received messages into it\nExample:\nlanguage en \n\n%s", nickname, prompt)
-				} else {
-					message = fmt.Sprintf("Welcome %s \n\n[?] help for ChatTCP:\nlist -> Show the nicknames of all connected users\ncall nickname -> call someone by the user nickname\naccept [nickanme of the other user]-> Accept a call\ndecline [nickanme of the other user] -> decline a call\n%s", nickname, prompt)
-				}
-				connection.Write([]byte(message))
-
-				go readers.ReadCallChannel(nickname, connection)
-
-				step += 1
-			}
-
-		case 3:
-			//Translation_functionality
-			if Action == "language" && bufferLen == 2 && global.Translation_service.Enable {
-				language := textInBufferSplited[1]
-				
-				if global.Translation_service.LTranslate {
-					language = strings.ToLower(language)
-					exists := autolanguage.LTCheck_language(language)
-
-					if exists {
-						global.Nicknames[nickname] = global.Nicknames_data{
-							Language: language,
-						}
-						connection.Write([]byte(prompt))
-						continue
-					} else {
-						message = fmt.Sprintf("[!] Invalid language code\n%s", prompt)
-						connection.Write([]byte(message))
-						continue
-					}
-				
-				}else if global.Translation_service.Deepl{
-					language = strings.ToUpper(language)
-					if autolanguage.DLCheck_language(language) {
-						global.Nicknames[nickname] = global.Nicknames_data{
-							Language: language,
-						}
-						connection.Write([]byte(prompt))
-						continue
-					} else {
-						message = fmt.Sprintf("[!] Invalid language code\n%s", prompt)
-						connection.Write([]byte(message))
-						continue
-					}
-				}
-
-				//LIST
-			} else if Action == "list" && bufferLen == 1 {
-
-				message = fmt.Sprintf("\n%s\n %s", checkers.List(global.AllNicknames), prompt)
-				connection.Write([]byte(message))
-
-				//CALL
-			} else if Action == "call" && bufferLen == 2 {
-
-				var (
-					nicknameToCall     = textInBufferSplited[1]
-					SendtoIsincallwith = global.Nicknames[nicknameToCall].IncallWith
-				)
-
-				if SendtoIsincallwith != "" {
-					message = fmt.Sprintf("[!] %s is already in a call\n%s", nicknameToCall, prompt)
-					connection.Write([]byte(message))
-					continue
-				}
-
-				if callingTo != "" || hasCall {
-					message = fmt.Sprintf("[!] You are already in a call\n%s", prompt)
-					connection.Write([]byte(message))
-					continue
-				}
-
-				if !checkers.CheckNickname(nicknameToCall) {
-
-					if nicknameToCall == nickname {
-						message = fmt.Sprintf("[!] You cannot call yourself\n%s", prompt)
-						connection.Write([]byte(message))
-						continue
-					}
-
-					// Making the call
-
-					global.ChannelId += 1
-					global.FrameId += 1
-
-					dataToSend := global.DataForChannel{
-						Id:        global.FrameId,
-						Action:    "CALL",
-						SendedBy:  nickname,
-						SendedTo:  nicknameToCall,
-						PrivateId: global.ChannelId,
-					}
-
-					global.Nicknames[nickname] = global.Nicknames_data{
-						CallingTo:  nicknameToCall,
-						ChannelId:  global.ChannelId,
-						IncallWith: nicknameToCall,
-						Language:   global.Nicknames[nickname].Language,
-					}
-
-					global.Nicknames[nicknameToCall] = global.Nicknames_data{
-						HasCall:  true,
-						CalledBy: nickname,
-						Language: global.Nicknames[nicknameToCall].Language,
-					}
-
-					message = fmt.Sprintf("[?] Send bye to stop the call\n( Waitting.... )=[ %s ]=> ", nickname)
-					connection.Write([]byte(message))
-
-					//CREATING DYNAMIC PRIVATE CHANNEL
-					global.PrivateChannels[global.ChannelId] = make(chan global.DataForChannel)
-
-					// SEND TO CALLQUEUE
-					global.CallQueue = append(global.CallQueue, dataToSend)
-
-					go readers.ReadPrivateChannel(nickname, connection, global.ChannelId)
-
-					step += 1
-
-				} else {
-					message = fmt.Sprintf("\n[!] The nickname: %s, is not connected\n\n%s", nicknameToCall, prompt)
-					connection.Write([]byte(message))
-				}
-
-				//ACCEPT
-			} else if Action == "accept" && bufferLen == 2 {
-
-				var (
-					dataSplited = strings.Split(textInBuffer, " ")
-					SendedBy    = nickname
-					SendedTo    = dataSplited[1]
-				)
-
-				if !global.Nicknames[nickname].HasCall {
-					message = fmt.Sprintf("[!] Nobody is calling you\n%s", prompt)
-					connection.Write([]byte(message))
-					continue
-				}
-
-				if global.Nicknames[SendedTo].CallingTo != nickname {
-					message = fmt.Sprintf("[!] %s is not calling you\n%s", SendedTo, prompt)
-					connection.Write([]byte(message))
-					continue
-				}
-
-				privateId := global.Nicknames[nickname].ChannelId
-
-				global.Nicknames[nickname] = global.Nicknames_data{
-					CalledBy:   "",
-					IncallWith: SendedTo,
-					ChannelId:  privateId,
-					Language:   global.Nicknames[nickname].Language,
-				}
-
-				global.FrameId += 1
-
-				dataToSend := global.DataForChannel{
-					Id:        global.FrameId,
-					Action:    "ACCEPT",
-					SendedBy:  SendedBy,
-					SendedTo:  SendedTo,
-					PrivateId: privateId,
-				}
-
-				fmt.Printf("ID ==> %d)\n", privateId)
-
-				// SEND TO ResponseQueue
-				global.ResponseQueue = append(global.ResponseQueue, dataToSend)
-
-				prompt = fmt.Sprintf("( %s <==> %s ) => ", global.Nicknames[nickname].IncallWith, nickname)
-				connection.Write([]byte(prompt))
-
-				step += 1
-
-				//DECLINE
-			} else if Action == "decline" && bufferLen == 2 {
-
-				var (
-					dataSplited = strings.Split(textInBuffer, " ")
-					SendedBy    = nickname
-					SendedTo    = dataSplited[1]
-					privateId   = global.Nicknames[nickname].ChannelId
-					called_by   = global.Nicknames[nickname].CalledBy
-				)
-
-				if called_by == SendedTo {
-
-					global.Nicknames[nickname] = global.Nicknames_data{
-						HasCall:                false,
-						CalledBy:               "",
-						CallingTo:              "",
-						IncallWith:             "",
-						ChangingToPreviousStep: false,
-						ChannelId:              0,
-						Language:               global.Nicknames[nickname].Language,
-					}
-
-					global.FrameId += 1
-
-					dataToSend := global.DataForChannel{
-						Id:        global.FrameId,
-						Action:    "DECLINE",
-						SendedBy:  SendedBy,
-						SendedTo:  SendedTo,
-						PrivateId: privateId,
-					}
-
-					// SEND TO ResponseQueue
-					global.ResponseQueue = append(global.ResponseQueue, dataToSend)
-					go readers.ReadCallChannel(nickname, connection)
-
-					connection.Write([]byte(prompt))
-
-				} else {
-					connection.Write([]byte("[!] That user is not calling you"))
-					connection.Write([]byte(prompt))
-
-					continue
-				}
-
-			} else if Action == "user_info" && bufferLen == 1 {
-				connection.Write([]byte(fmt.Sprintf("\n\nnickname => %s\nchannel id => %d\nIn call with => %s\nLanguage => %s\n%s", nickname, channelId, incallWith,  global.Nicknames[nickname].Language, prompt)))
-
-			} else if Action == "bye" && bufferLen == 1 {
-				connection.Write([]byte("[!] You are not calling or in a conversation"))
-
-			} else {
-				message = fmt.Sprintf("\n[!] Not a command\n\n%s", prompt)
-				connection.Write([]byte(message))
-
-			}
-
-		case 4:
-
-			if incallWith == "" && callingTo == "" {
-				step = 3
-				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
+			if bufferLen != 2 || !global.Translation_service.Enable {
 				continue
 			}
 
-			if Action == "bye" && bufferLen == 1 {
-				prompt = fmt.Sprintf("[ %s ]=> ", nickname)
+			language := textInBufferSplited[1]
 
-				global.FrameId += 1
+			if global.Translation_service.LTranslate {
+				language = strings.ToLower(language)
+				exists := autolanguage.LTCheck_language(language)
 
-				dataToSend := global.DataForChannel{
-					Id:        global.FrameId,
+				if exists {
+					global.Nicknames[nickname] = global.Nicknames_data{
+						Language: language,
+					}
+					continue
+				} else {
+					jsonErr := netError.SetError("Invalid language")
+					connection.Write(jsonErr)
+					continue
+				}
+
+			} else if global.Translation_service.Deepl {
+				language = strings.ToUpper(language)
+				if autolanguage.DLCheck_language(language) {
+					global.Nicknames[nickname] = global.Nicknames_data{
+						Language: language,
+					}
+					continue
+				} else {
+					jsonErr := netError.SetError("Invalid language")
+					connection.Write(jsonErr)
+					continue
+				}
+			}
+		case "list":
+
+			if bufferLen != 1 {
+				continue
+			}
+
+			jsonList, err := json.Marshal(global.AllNicknames)
+			if err != nil {
+				jsonErr := netError.SetError("Deserialization error")
+				connection.Write(jsonErr)
+				continue
+			} else {
+				connection.Write([]byte(jsonList))
+
+			}
+
+		case "call":
+
+			if bufferLen != 2 {
+				continue
+			}
+
+			var (
+				nicknameToCall     = textInBufferSplited[1]
+				SendtoIsincallwith = global.Nicknames[nicknameToCall].IncallWith
+			)
+
+			println(nicknameToCall)
+
+			if SendtoIsincallwith != "" {
+				jsonErr := netError.SetError("User is in call")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			if callingTo != "" || inCall {
+				jsonErr := netError.SetError("You are in call")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			if checkers.CheckNickname(nicknameToCall) {
+				jsonErr := netError.SetError("Not connected")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			// Call initialization and changing state of users
+
+			global.ChannelId += 1
+			
+			dataToSend := global.DataForChannel{
+				Action:    "CALL",
+				SendedBy:  nickname,
+				SendedTo:  nicknameToCall,
+				PrivateId: global.ChannelId,
+			}
+
+			global.Nicknames[nickname] = global.Nicknames_data{
+				CallingTo: nicknameToCall,
+				IncallWith: nicknameToCall,
+				ChannelId: global.ChannelId,
+				Language:  global.Nicknames[nickname].Language,
+				InCall: true,
+			}
+
+			global.Nicknames[nicknameToCall] = global.Nicknames_data{
+				IncallWith: nickname,
+				HasCall:  true,
+				CalledBy: nickname,
+				Language: global.Nicknames[nicknameToCall].Language,
+			}
+
+			//CREATING DYNAMIC PRIVATE CHANNEL
+			global.PrivateChannels[global.ChannelId] = make(chan global.DataForChannel)
+
+			// SEND TO CALLQUEUE
+			global.CallQueue = append(global.CallQueue, dataToSend)
+
+			go readers.ReadPrivateChannel(nickname, connection)
+
+
+		case "accept":
+
+			var (
+				dataSplited = strings.Split(textInBuffer, " ")
+				SendedBy    = nickname
+				SendedTo    = dataSplited[1]
+			)
+
+			if bufferLen != 2 {
+				continue
+			}
+
+			if !global.Nicknames[nickname].HasCall {
+				jsonErr := netError.SetError("Not called")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			if global.Nicknames[SendedTo].CallingTo != nickname {
+				jsonErr := netError.SetError("Not calling you")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			privateId := global.Nicknames[nickname].ChannelId
+
+			global.Nicknames[nickname] = global.Nicknames_data{
+				CalledBy:   "",
+				IncallWith: SendedTo,
+				ChannelId:  privateId,
+				HasCall:    false,
+				InCall:     true,
+				Language:   global.Nicknames[nickname].Language,
+			}
+
+			dataToSend := global.DataForChannel{
+				Action:    "ACCEPT",
+				SendedBy:  SendedBy,
+				SendedTo:  SendedTo,
+				PrivateId: privateId,
+			}
+
+			// SEND TO ResponseQueue
+			global.MessageQueue = append(global.MessageQueue, dataToSend)
+
+		case "decline":
+
+			var (
+				dataSplited = strings.Split(textInBuffer, " ")
+				SendedBy    = nickname
+				SendedTo    = dataSplited[1]
+			)
+
+			if bufferLen != 2 {
+				continue
+			}
+
+			if !global.Nicknames[nickname].HasCall {
+				jsonErr := netError.SetError("Not called")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			if global.Nicknames[SendedTo].CallingTo != nickname {
+				jsonErr := netError.SetError("Not calling you")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			privateId := global.Nicknames[nickname].ChannelId
+
+			global.Nicknames[nickname] = global.Nicknames_data{
+				CalledBy:   "",
+				IncallWith: SendedTo,
+				ChannelId:  0,
+				HasCall:    false,
+				InCall:     false,
+				Language:   global.Nicknames[nickname].Language,
+			}
+
+			dataToSend := global.DataForChannel{
+				Action:    "DECLINE",
+				SendedBy:  SendedBy,
+				SendedTo:  SendedTo,
+				PrivateId: privateId,
+			}
+
+			global.MessageQueue = append(global.MessageQueue, dataToSend)
+
+		case "bye":
+
+			if !inCall {
+				jsonErr := netError.SetError("Not in call")
+				connection.Write(jsonErr)
+				continue
+			}
+
+			var dataToSend = global.DataForChannel{}
+
+			if callingTo == "" {
+				dataToSend = global.DataForChannel{
 					Action:    "END",
 					SendedBy:  nickname,
 					SendedTo:  incallWith,
 					PrivateId: channelId,
 				}
-
-				if callingTo != "" {
-
-					global.FrameId += 1
-
-					dataToSend = global.DataForChannel{
-						Id:        global.FrameId,
-						Action:    "END",
-						SendedBy:  nickname,
-						SendedTo:  callingTo,
-						PrivateId: channelId,
-					}
-
+			} else {
+				dataToSend = global.DataForChannel{
+					Action:    "END",
+					SendedBy:  nickname,
+					SendedTo:  incallWith,
+					PrivateId: channelId,
 				}
+			}
 
-				// SEND TO MessageQueue
-				global.MessageQueue = append(global.MessageQueue, dataToSend)
+			go readers.ReadCallChannel(nickname, connection)
 
-				global.Nicknames[nickname] = global.Nicknames_data{
-					HasCall:                false,
-					CalledBy:               "",
-					CallingTo:              "",
-					IncallWith:             "",
-					ChangingToPreviousStep: false,
-					ChannelId:              0,
-					Language:               global.Nicknames[nickname].Language,
-				}
+			// SEND TO MessageQueue
+			global.MessageQueue = append(global.MessageQueue, dataToSend)
 
-				connection.Write([]byte(prompt))
-				step = 3
-				go readers.ReadCallChannel(nickname, connection)
-				continue
+			// changing user state
+			global.Nicknames[nickname] = global.Nicknames_data{
+				HasCall:    false,
+				InCall:     false,
+				CalledBy:   "",
+				CallingTo:  "",
+				IncallWith: "",
+				ChannelId:  0,
+				Language:   global.Nicknames[nickname].Language,
+			}
 
-			} else if Action == "user_info" && bufferLen == 1 {
-				connection.Write([]byte(fmt.Sprintf("\n\nnickname => %s\nchannel id => %d\nIn call with => %s\nLanguage => %s\n%s", nickname, channelId, incallWith,  global.Nicknames[nickname].Language, prompt)))
+		case "send":
+			
+			if !inCall {
+				jsonErr := netError.SetError("Not in call")
+				connection.Write(jsonErr)
 				continue
 			}
+
+			message := strings.Split(textInBuffer, " ")
+			message = message[1:]
 
 			dataToSend := global.DataForChannel{
 				Action:    "SEND",
 				SendedBy:  nickname,
 				SendedTo:  incallWith,
-				Message:   textInBuffer,
+				Message:   strings.Join(message, ""),
 				PrivateId: channelId,
 			}
 
 			global.MessageQueue = append(global.MessageQueue, dataToSend)
 
-			prompt = fmt.Sprintf("( %s <==> %s ) => ", incallWith, nickname)
-			connection.Write([]byte(prompt))
+		default:
+			jsonErr := netError.SetError("Invalid action")
+			connection.Write(jsonErr)
+			continue
 
 		}
 	}
